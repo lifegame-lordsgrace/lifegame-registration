@@ -6,6 +6,33 @@ const app = express();
 // for photo upload from frontend
 const upload = multer();
 
+let google = require('googleapis');
+let privatekey = require("./gapi_cred.json");
+
+// configure a JWT auth client
+let jwtClient = new google.auth.JWT(
+  privatekey.client_email,
+  null,
+  privatekey.private_key,
+  ['https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/spreadsheets']
+);
+
+//authenticate request
+jwtClient.authorize(function (err, tokens) {
+  if (err) {
+    console.log(err);
+    return;
+  } else {
+    console.log("Successfully connected!");
+  }
+});
+
+//Google Drive API
+let drive = google.drive('v3');
+//Google Sheets API
+let sheets = google.sheets('v4');
+
 app.set("port", process.env.PORT || 3001);
 app.use(bodyParser.json());
 
@@ -25,6 +52,68 @@ app.post("/api/form", (req, res) => {
   //  marriageStatus: null,
   //  religionStatus: null }
   // TODO: validate on the backend side and write to google sheet
+
+  var resourceValues = {
+    "majorDimension": "ROWS",
+    values: [
+      [
+        req.body.chineseName,
+        req.body.englishFirstName + ' ' + req.body.englishLastName,
+        req.body.gender,
+        req.body.age,
+        req.body.marriageStatus,
+        req.body.religionStatus
+      ]
+    ]
+  };
+  sheets.spreadsheets.values.append({
+    // TODO: pass through env ID of the V2 registration spreadsheet.
+    spreadsheetId: '1X1r0K361bimHJxLwudLj8VO6zf_soJGPV9_lbvjxTR8',
+    // The A1 notation of a range to search for a logical table of data.
+    // Values will be appended after the last row of the table.
+    range: 'Sheet1!A1',
+    // How the input data should be interpreted.
+    valueInputOption: 'USER_ENTERED',
+    // How the input data should be inserted.
+    insertDataOption: 'INSERT_ROWS',
+    auth: jwtClient,
+    resource: resourceValues
+  }, function(err, response) {
+    if (err) {
+      console.error(err);
+      return;
+    }
+
+    console.log(JSON.stringify(response, null, 2));
+  });
+
+  // TODO upon successful submission, rename the file and move the image to private drive folder
+  // TODO how do we propagate file id from the previous post
+  /**
+  val renameValue = {'title': req.body.englishFirstName + ' ' + req.body.englishLastName + '.jpeg'}
+  drive.files.patch({
+    fileId: fileId,
+    resource: renameValue
+  }, function (err, file) {
+    if (err) {
+      // Handle error
+    } else {
+      // File moved.
+    }
+  });
+  drive.files.update({
+      fileId: fileId,
+      addParents: folderId,
+      removeParents: ['19GNdcJOJxhKQZYJefNkNt0LiR95d_tN_'],
+      fields: 'id, parents'
+    }, function (err, file) {
+      if (err) {
+        // Handle error
+      } else {
+        // File moved.
+      }
+    });
+  **/
 });
 
 app.post("/api/photo", upload.single("avatar"), (req, res) => {
@@ -39,7 +128,33 @@ app.post("/api/photo", upload.single("avatar"), (req, res) => {
   // TODO: validate on the backend, upload to google photo, and return the
   // public url or the tokens  to construct a url to frontend to render the
   // uploaded image.
-  res.json({url: 'http://www.sandiegovips.com/wp-content/uploads/2014/05/test-image.jpeg'});
+
+  const fileMetadata = {
+    name: req.file.originalname,
+    // TODO pass through env ID of the Google Drive folder for all photo uploads
+    parents: ['19GNdcJOJxhKQZYJefNkNt0LiR95d_tN_']
+  };
+
+  const media = {
+    mimeType: 'image/jpeg',
+    body: req.file.buffer
+  };
+
+  drive.files.create({
+    auth: jwtClient,
+    resource: fileMetadata,
+    media,
+    fields: 'id'
+  }, (err, file) => {
+    if (err) {
+      console.log(err);
+      return;
+    }
+    // Log the id of the new file on Drive
+    console.log('Uploaded File Id: ', file.id);
+    var previewurl = 'https://drive.google.com/uc?id=' + file.id;
+    res.json({url: previewurl});
+  });
 });
 
 app.listen(app.get("port"), () => {
