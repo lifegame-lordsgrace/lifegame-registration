@@ -7,13 +7,14 @@ const app = express();
 const upload = multer();
 
 let google = require('googleapis');
-let privatekey = require("./gapi_cred.json");
 
 // configure a JWT auth client
+var private_key_value = process.env.gapi_private_key.replace(/\\n/g, '\n');
+
 let jwtClient = new google.auth.JWT(
-  privatekey.client_email,
+  process.env.gapi_client_email,
   null,
-  privatekey.private_key,
+  private_key_value,
   ['https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/spreadsheets']
 );
@@ -67,8 +68,7 @@ app.post("/api/form", (req, res) => {
     ]
   };
   sheets.spreadsheets.values.append({
-    // TODO: pass through env ID of the V2 registration spreadsheet.
-    spreadsheetId: '1X1r0K361bimHJxLwudLj8VO6zf_soJGPV9_lbvjxTR8',
+    spreadsheetId: process.env.gapi_sheet_id,
     // The A1 notation of a range to search for a logical table of data.
     // Values will be appended after the last row of the table.
     range: 'Sheet1!A1',
@@ -103,8 +103,8 @@ app.post("/api/form", (req, res) => {
   });
   drive.files.update({
       fileId: fileId,
-      addParents: folderId,
-      removeParents: ['19GNdcJOJxhKQZYJefNkNt0LiR95d_tN_'],
+      addParents: [process.env.gapi_private_folder_id],
+      removeParents: [process.env.gapi_public_folder_id],
       fields: 'id, parents'
     }, function (err, file) {
       if (err) {
@@ -131,8 +131,7 @@ app.post("/api/photo", upload.single("avatar"), (req, res) => {
 
   const fileMetadata = {
     name: req.file.originalname,
-    // TODO pass through env ID of the Google Drive folder for all photo uploads
-    parents: ['19GNdcJOJxhKQZYJefNkNt0LiR95d_tN_']
+    parents: [process.env.gapi_public_folder_id]
   };
 
   const media = {
