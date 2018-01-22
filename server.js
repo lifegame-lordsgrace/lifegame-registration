@@ -22,6 +22,7 @@ const jwtClient = new google.auth.JWT(
 //authenticate request
 jwtClient.authorize(function (err, tokens) {
   if (err) {
+    // TODO return server error to frontend
     console.log(err);
     return;
   } else {
@@ -97,7 +98,7 @@ app.post("/api/form", (req, res) => {
     resource: renameValue
   }, function (err, file) {
     if (err) {
-      // Handle error
+      // return server error to frontend
     } else {
       // File moved.
     }
@@ -105,11 +106,12 @@ app.post("/api/form", (req, res) => {
   drive.files.update({
       fileId: fileId,
       addParents: [process.env.gapi_private_folder_id],
+      // TODO add gapi_public_folder_id to configuration
       removeParents: [process.env.gapi_public_folder_id],
       fields: 'id, parents'
     }, function (err, file) {
       if (err) {
-        // Handle error
+        // return server error to frontend
       } else {
         // File moved.
       }
