@@ -6,12 +6,12 @@ const app = express();
 // for photo upload from frontend
 const upload = multer();
 
-let google = require('googleapis');
+const google = require('googleapis');
 
 // configure a JWT auth client
-var private_key_value = process.env.gapi_private_key.replace(/\\n/g, '\n');
+const private_key_value = process.env.gapi_private_key.replace(/\\n/g, '\n');
 
-let jwtClient = new google.auth.JWT(
+const jwtClient = new google.auth.JWT(
   process.env.gapi_client_email,
   null,
   private_key_value,
@@ -30,9 +30,9 @@ jwtClient.authorize(function (err, tokens) {
 });
 
 //Google Drive API
-let drive = google.drive('v3');
+const drive = google.drive('v3');
 //Google Sheets API
-let sheets = google.sheets('v4');
+const sheets = google.sheets('v4');
 
 app.set("port", process.env.PORT || 3001);
 app.use(bodyParser.json());
@@ -80,6 +80,7 @@ app.post("/api/form", (req, res) => {
     resource: resourceValues
   }, function(err, response) {
     if (err) {
+      // TODO return server error to frontend
       console.error(err);
       return;
     }
@@ -135,6 +136,7 @@ app.post("/api/photo", upload.single("avatar"), (req, res) => {
   };
 
   const media = {
+    // TODO do we need to handle other image formats?
     mimeType: 'image/jpeg',
     body: req.file.buffer
   };
@@ -146,6 +148,7 @@ app.post("/api/photo", upload.single("avatar"), (req, res) => {
     fields: 'id'
   }, (err, file) => {
     if (err) {
+      // TODO return server error to frontend
       console.log(err);
       return;
     }
