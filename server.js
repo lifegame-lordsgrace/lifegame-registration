@@ -6,6 +6,35 @@ const app = express();
 // for photo upload from frontend
 const upload = multer();
 
+const google = require('googleapis');
+
+// configure a JWT auth client
+const private_key_value = process.env.gapi_private_key.replace(/\\n/g, '\n');
+
+const jwtClient = new google.auth.JWT(
+  process.env.gapi_client_email,
+  null,
+  private_key_value,
+  ['https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/spreadsheets']
+);
+
+//authenticate request
+jwtClient.authorize(function (err, tokens) {
+  if (err) {
+    // TODO return server error to frontend
+    console.log(err);
+    return;
+  } else {
+    console.log("Successfully connected!");
+  }
+});
+
+//Google Drive API
+const drive = google.drive('v3');
+//Google Sheets API
+const sheets = google.sheets('v4');
+
 app.set("port", process.env.PORT || 3001);
 app.use(bodyParser.json());
 
@@ -25,6 +54,69 @@ app.post("/api/form", (req, res) => {
   //  marriageStatus: null,
   //  religionStatus: null }
   // TODO: validate on the backend side and write to google sheet
+
+  var resourceValues = {
+    "majorDimension": "ROWS",
+    values: [
+      [
+        req.body.chineseName,
+        req.body.englishFirstName + ' ' + req.body.englishLastName,
+        req.body.gender,
+        req.body.age,
+        req.body.marriageStatus,
+        req.body.religionStatus
+      ]
+    ]
+  };
+  sheets.spreadsheets.values.append({
+    spreadsheetId: process.env.gapi_sheet_id,
+    // The A1 notation of a range to search for a logical table of data.
+    // Values will be appended after the last row of the table.
+    range: 'Sheet1!A1',
+    // How the input data should be interpreted.
+    valueInputOption: 'USER_ENTERED',
+    // How the input data should be inserted.
+    insertDataOption: 'INSERT_ROWS',
+    auth: jwtClient,
+    resource: resourceValues
+  }, function(err, response) {
+    if (err) {
+      // TODO return server error to frontend
+      console.error(err);
+      return;
+    }
+
+    console.log(JSON.stringify(response, null, 2));
+  });
+
+  // TODO upon successful submission, rename the file and move the image to private drive folder
+  // TODO how do we propagate file id from the previous post
+  /**
+  val renameValue = {'title': req.body.englishFirstName + ' ' + req.body.englishLastName + '.jpeg'}
+  drive.files.patch({
+    fileId: fileId,
+    resource: renameValue
+  }, function (err, file) {
+    if (err) {
+      // return server error to frontend
+    } else {
+      // File moved.
+    }
+  });
+  drive.files.update({
+      fileId: fileId,
+      addParents: [process.env.gapi_private_folder_id],
+      // TODO add gapi_public_folder_id to configuration
+      removeParents: [process.env.gapi_public_folder_id],
+      fields: 'id, parents'
+    }, function (err, file) {
+      if (err) {
+        // return server error to frontend
+      } else {
+        // File moved.
+      }
+    });
+  **/
 });
 
 app.post("/api/photo", upload.single("avatar"), (req, res) => {
@@ -39,7 +131,34 @@ app.post("/api/photo", upload.single("avatar"), (req, res) => {
   // TODO: validate on the backend, upload to google photo, and return the
   // public url or the tokens  to construct a url to frontend to render the
   // uploaded image.
-  res.json({url: 'http://www.sandiegovips.com/wp-content/uploads/2014/05/test-image.jpeg'});
+
+  const fileMetadata = {
+    name: req.file.originalname,
+    parents: [process.env.gapi_public_folder_id]
+  };
+
+  const media = {
+    // TODO do we need to handle other image formats?
+    mimeType: 'image/jpeg',
+    body: req.file.buffer
+  };
+
+  drive.files.create({
+    auth: jwtClient,
+    resource: fileMetadata,
+    media,
+    fields: 'id'
+  }, (err, file) => {
+    if (err) {
+      // TODO return server error to frontend
+      console.log(err);
+      return;
+    }
+    // Log the id of the new file on Drive
+    console.log('Uploaded File Id: ', file.id);
+    var previewurl = 'https://drive.google.com/uc?id=' + file.id;
+    res.json({url: previewurl});
+  });
 });
 
 app.listen(app.get("port"), () => {
